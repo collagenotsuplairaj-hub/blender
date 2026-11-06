@@ -1,0 +1,60 @@
+name: build-apk
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/build.yml"]
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build patchelf zip unzip git-lfs openjdk-17-jdk python3 gcc-14 g++-14
+          cmake --version
+      - name: Android SDK and NDK
+        run: |
+          export ANDROID_HOME=$HOME/android-sdk
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          curl -fL -o /tmp/cl.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q /tmp/cl.zip -d /tmp/cl
+          mv /tmp/cl/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=3 "ndk;30.0.14904198-beta1" "platform-tools" "build-tools;35.0.1" "platforms;android-35"
+      - name: LFS and libs
+        run: |
+          git config lfs.url https://projects.blender.org/blender/blender.git/info/lfs
+          git config --local credential.https://projects.blender.org.helper '!f() { echo username=; echo password=; }; f'
+          git lfs install --local
+          git lfs pull
+          git -c submodule.lib/linux_x64.update=checkout submodule update --init lib/linux_x64
+          git submodule update --init lib/android_arm64
+          du -sh lib/*
+      - name: Vulkan headers
+        run: |
+          VER=1.4.341
+          curl -fL -o /tmp/vh.tar.gz https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v$VER.tar.gz
+          tar -xzf /tmp/vh.tar.gz -C /tmp
+          mkdir -p ../blender_build_android/lib/vulkan_headers
+          cp -R /tmp/Vulkan-Headers-$VER/include ../blender_build_android/lib/vulkan_headers/include
+      - name: Build lite APK
+        run: |
+          export ANDROID_HOME=$HOME/android-sdk
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          python3 build_files/android/build.py lite
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          find .. -name "*.apk" -path "*android_apk_stage*" -exec cp {} out/ \;
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blender-apk
+          path: out/*.apk
