@@ -26,8 +26,19 @@ jobs:
           unzip -q /tmp/cl.zip -d /tmp/cl
           mv /tmp/cl/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --channel=3 "ndk;30.0.14904198-beta1" "platform-tools" "build-tools;35.0.1" "platforms;android-35"
+          SM=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          set +o pipefail
+          yes | $SM --licenses > /dev/null || true
+          $SM --list --channel=3 2>/dev/null | grep -i "ndk;30" || true
+          $SM --channel=3 "platform-tools" "build-tools;35.0.1" "platforms;android-35"
+          V=""
+          if $SM --channel=3 "ndk;30.0.14904198-beta1"; then V=30.0.14904198-beta1; fi
+          if [ -z "$V" ]; then
+            $SM --channel=3 "ndk;30.0.16248370" || exit 1
+            V=30.0.16248370
+          fi
+          echo "Using NDK $V"
+          echo "ANDROID_NDK_VERSION=$V" >> $GITHUB_ENV
       - name: LFS and libs
         run: |
           git config lfs.url https://projects.blender.org/blender/blender.git/info/lfs
