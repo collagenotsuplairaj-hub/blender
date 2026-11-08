@@ -1,0 +1,69 @@
+name: test-startup-script
+on:
+  workflow_dispatch:
+  push:
+    branches: [android]
+    paths:
+      - 'scripts/startup/**'
+      - '.github/workflows/test-script.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Try pip install bpy
+        id: pip_bpy
+        run: |
+          set -e
+          if pip install bpy; then
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download Blender (fallback)
+        if: steps.pip_bpy.outputs.success == 'false'
+        run: |
+          set -e
+          BLENDER_VERSION="4.3.0"
+          curl -fL -o /tmp/blender.tar.xz "https://download.blender.org/release/Blender${BLENDER_VERSION%.*}/blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          tar -xf /tmp/blender.tar.xz -C /tmp
+          echo "BLENDER_PATH=/tmp/blender-${BLENDER_VERSION}-linux-x64/blender" >> $GITHUB_ENV
+
+      - name: Test bl_ai_agent.py
+        env:
+          BLENDER_PATH: ${{ env.BLENDER_PATH }}
+        run: |
+          set -e
+          cat > /tmp/test_agent.py << 'EOF'
+          import sys
+          import traceback
+
+          # Add scripts/startup to path
+          sys.path.insert(0, '${{ github.workspace }}/scripts/startup')
+
+          try:
+              import bl_ai_agent
+              bl_ai_agent.register()
+              print("REGISTER_OK")
+              bl_ai_agent.unregister()
+              print("UNREGISTER_OK")
+          except Exception as e:
+              traceback.print_exc()
+              sys.exit(1)
+          EOF
+
+          if [ -n "$BLENDER_PATH" ]; then
+            "$BLENDER_PATH" -b --python /tmp/test_agent.py
+          else
+            python3 /tmp/test_agent.py
+          fi
