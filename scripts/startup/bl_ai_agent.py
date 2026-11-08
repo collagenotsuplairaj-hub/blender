@@ -17,6 +17,8 @@ import traceback
 from bpy.props import StringProperty, BoolProperty
 from bpy.types import Panel, Operator, PropertyGroup
 
+AI_VERSION = "v2"
+
 
 class AIAgentProperties(PropertyGroup):
     """Properties for the AI Agent panel."""
@@ -191,9 +193,58 @@ class AIAgent_OT_ExportVideo(Operator):
         return {'FINISHED'}
 
 
+class AIAgent_OT_HeaderPopup(Operator):
+    """Popup panel from header button."""
+    bl_idname = "ai_agent.header_popup"
+    bl_label = "AI Agent"
+    bl_description = "Open AI Agent quick panel"
+    bl_options = {'REGISTER'}
+
+    def draw(self, context):
+        try:
+            layout = self.layout
+            props = context.scene.ai_agent_props
+
+            layout.label(text=f"AI Agent {AI_VERSION}", icon='INFO')
+
+            layout.separator()
+
+            # Prompt text box
+            layout.prop(props, "prompt_text", text="")
+
+            # Run button
+            row = layout.row()
+            row.scale_y = 1.2
+            row.operator("ai_agent.run_prompt", icon='PLAY', text="Run")
+
+            layout.separator()
+
+            # Import button
+            row = layout.row()
+            row.scale_y = 1.1
+            row.operator("ai_agent.import_file", icon='IMPORT', text="Import")
+
+            # Export Video button
+            row = layout.row()
+            row.scale_y = 1.1
+            row.operator("ai_agent.export_video", icon='RENDER_ANIMATION', text="Export Video")
+
+        except Exception as e:
+            traceback.print_exc()
+            self.layout.label(text=f"Error: {e}")
+
+    def invoke(self, context, event):
+        try:
+            return context.window_manager.invoke_props_dialog(self, width=300)
+        except Exception as e:
+            traceback.print_exc()
+            self.report({'ERROR'}, f"Error: {str(e)}")
+            return {'CANCELLED'}
+
+
 class VIEW3D_PT_AIAgent(Panel):
     """AI Agent panel in the 3D Viewport sidebar."""
-    bl_label = "AI"
+    bl_label = f"AI Agent {AI_VERSION}"
     bl_idname = "VIEW3D_PT_ai_agent"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -201,28 +252,87 @@ class VIEW3D_PT_AIAgent(Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
+        try:
+            layout = self.layout
+            props = context.scene.ai_agent_props
+
+            # Prompt text box
+            layout.prop(props, "prompt_text", text="")
+
+            # Run button
+            row = layout.row()
+            row.scale_y = 1.2
+            row.operator("ai_agent.run_prompt", icon='PLAY', text="Run")
+
+            layout.separator()
+
+            # Import button
+            row = layout.row()
+            row.scale_y = 1.1
+            row.operator("ai_agent.import_file", icon='IMPORT', text="Import")
+
+            # Export Video button
+            row = layout.row()
+            row.scale_y = 1.1
+            row.operator("ai_agent.export_video", icon='RENDER_ANIMATION', text="Export Video")
+
+        except Exception as e:
+            traceback.print_exc()
+            self.layout.label(text=f"Error: {e}")
+
+
+def draw_header_button(self, context):
+    """Draw the AI button in the 3D Viewport header."""
+    try:
         layout = self.layout
-        props = context.scene.ai_agent_props
+        row = layout.row(align=True)
+        row.scale_x = 1.3
+        row.operator("ai_agent.header_popup", text="AI", icon='NONE', depress=False)
+    except Exception as e:
+        traceback.print_exc()
 
-        # Prompt text box
-        layout.prop(props, "prompt_text", text="")
 
-        # Run button
-        row = layout.row()
-        row.scale_y = 1.2
-        row.operator("ai_agent.run_prompt", icon='PLAY', text="Run")
+def show_startup_popup(self, context):
+    """Show startup popup with version info."""
+    try:
+        self.layout.label(text=f"AI AGENT {AI_VERSION} লোড হয়েছে")
+        self.layout.separator()
+        self.layout.label(text="Blender-এর ভেতরে স্ক্রিপ্ট চলছে")
+        self.layout.label(text="উপরের হেডারে AI বোতাম দেখো")
+        self.layout.label(text="ডানের সাইডবারে AI ট্যাব দেখো")
+    except Exception as e:
+        traceback.print_exc()
 
-        layout.separator()
 
-        # Import button
-        row = layout.row()
-        row.scale_y = 1.1
-        row.operator("ai_agent.import_file", icon='IMPORT', text="Import")
+def startup_popup_timer():
+    """Timer callback to show startup popup after 2 seconds."""
+    try:
+        bpy.context.window_manager.popup_menu(show_startup_popup, title="AI Agent Startup", icon='INFO')
+    except Exception as e:
+        traceback.print_exc()
+    return None  # Don't repeat
 
-        # Export Video button
-        row = layout.row()
-        row.scale_y = 1.1
-        row.operator("ai_agent.export_video", icon='RENDER_ANIMATION', text="Export Video")
+
+def open_sidebar_and_activate_ai_tab():
+    """Timer callback to open sidebar and activate AI tab in all 3D Viewports."""
+    try:
+        for window in bpy.context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for region in area.regions:
+                        if region.type == 'UI':
+                            # Open sidebar (N-panel)
+                            space = area.spaces.active
+                            if hasattr(space, 'show_region_ui'):
+                                space.show_region_ui = True
+                            # Activate AI category in sidebar
+                            for region in area.regions:
+                                if region.type == 'UI':
+                                    # The category is set by bl_category in the panel
+                                    pass
+    except Exception as e:
+        traceback.print_exc()
+    return None  # Don't repeat
 
 
 classes = (
@@ -230,6 +340,7 @@ classes = (
     AIAgent_OT_RunPrompt,
     AIAgent_OT_ImportFile,
     AIAgent_OT_ExportVideo,
+    AIAgent_OT_HeaderPopup,
     VIEW3D_PT_AIAgent,
 )
 
@@ -240,6 +351,17 @@ def register():
         for cls in classes:
             bpy.utils.register_class(cls)
         bpy.types.Scene.ai_agent_props = bpy.props.PointerProperty(type=AIAgentProperties)
+
+        # Add header button
+        bpy.types.VIEW3D_HT_header.append(draw_header_button)
+
+        # Schedule startup popup after 2 seconds
+        bpy.app.timers.register(startup_popup_timer, first_interval=2.0)
+
+        # Schedule sidebar open and AI tab activation
+        bpy.app.timers.register(open_sidebar_and_activate_ai_tab, first_interval=2.5)
+
+        print("bl_ai_agent v2 loaded")
         print("[AI Agent] Registered successfully")
     except Exception as e:
         traceback.print_exc()
@@ -249,6 +371,9 @@ def register():
 def unregister():
     """Unregister the AI Agent panel and operators."""
     try:
+        # Remove header button
+        bpy.types.VIEW3D_HT_header.remove(draw_header_button)
+
         del bpy.types.Scene.ai_agent_props
         for cls in reversed(classes):
             bpy.utils.unregister_class(cls)
