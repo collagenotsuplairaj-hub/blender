@@ -237,4 +237,4 @@ def unregister():
         _log_error(f"unregister: {e}\n{traceback.format_exc()}")
 
 if __name__ == "__main__":
-    register()
+    register()# trigger test
