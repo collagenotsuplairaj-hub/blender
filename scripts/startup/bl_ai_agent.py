@@ -63,7 +63,7 @@ try:
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(f"[{timestamp}] {msg}\n")
         except Exception:
-            pass
+            pass  # Ignore logging errors (e.g., in headless mode)
 
     def _find_view3d_area():
         """Find a VIEW_3D area in any window."""
@@ -125,6 +125,7 @@ try:
         except Exception as e:
             ping("workspace_rename_fail", err=str(e)[:200])
             _log_error(f"_ensure_ai_workspace: {e}\n{_tb.format_exc()}")
+            # Don't raise - workspace rename is not critical
 
     class AI_AGENT_PT_panel(bpy.types.Panel):
         bl_label = "AI Agent"
@@ -266,7 +267,11 @@ try:
     def register():
         ping("register_start")
         try:
-            _ensure_ai_workspace()
+            headless = _is_headless()
+            if not headless:
+                _ensure_ai_workspace()
+            else:
+                ping("register_headless", msg="skipped workspace")
 
             for cls in _CLASSES:
                 try:
@@ -281,7 +286,7 @@ try:
                     raise
 
             # Skip UI modifications in headless mode (e.g., CI tests)
-            if not _is_headless():
+            if not headless:
                 # Prepend AI button to VIEW_3D header (left side)
                 bpy.types.VIEW3D_HT_header.prepend(_draw_header_ai_button)
 
