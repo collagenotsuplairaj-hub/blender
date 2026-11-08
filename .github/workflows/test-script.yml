@@ -5,6 +5,7 @@ on:
     branches: [android]
     paths:
       - 'scripts/startup/**'
+    paths-ignore:
       - '.github/workflows/test-script.yml'
 jobs:
   test:

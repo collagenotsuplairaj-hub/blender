@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [android]
-    paths-ignore: ['**.md']
+    paths-ignore: ['**.md', '.github/workflows/test-script.yml']
 jobs:
   build:
     runs-on: ubuntu-24.04
