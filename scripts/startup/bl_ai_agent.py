@@ -3,23 +3,49 @@ import threading
 import traceback as _tb
 import urllib.parse
 import urllib.request
+import queue
 
 AI_VERSION = "v4"
 
-def ping(stage: str, **info):
-    """Send a probe ping to http://127.0.0.1:9999/p in a daemon thread.
-    Never blocks Blender, swallows all exceptions."""
-    def _send():
+# Ping queue and worker thread for efficient non-blocking pings
+_ping_queue = queue.Queue()
+_ping_worker_started = False
+
+def _ping_worker():
+    """Single worker thread that processes ping queue."""
+    while True:
         try:
-            params = {"stage": stage, **info}
-            qs = urllib.parse.urlencode(params)
-            url = f"http://127.0.0.1:9999/p?{qs}"
-            req = urllib.request.Request(url)
-            urllib.request.urlopen(req, timeout=1)
+            item = _ping_queue.get()
+            if item is None:  # Shutdown signal
+                break
+            stage, info = item
+            try:
+                params = {"stage": stage, **info}
+                qs = urllib.parse.urlencode(params)
+                url = f"http://127.0.0.1:9999/p?{qs}"
+                req = urllib.request.Request(url)
+                urllib.request.urlopen(req, timeout=1)
+            except Exception:
+                pass
         except Exception:
             pass
-    t = threading.Thread(target=_send, daemon=True)
-    t.start()
+
+def _ensure_ping_worker():
+    """Start the ping worker thread if not already running."""
+    global _ping_worker_started
+    if not _ping_worker_started:
+        t = threading.Thread(target=_ping_worker, daemon=True)
+        t.start()
+        _ping_worker_started = True
+
+def ping(stage: str, **info):
+    """Send a probe ping to http://127.0.0.1:9999/p via queue.
+    Never blocks Blender, swallows all exceptions."""
+    _ensure_ping_worker()
+    try:
+        _ping_queue.put_nowait((stage, info))
+    except Exception:
+        pass
 
 ping("import_start", py=sys.version)
 
@@ -230,6 +256,13 @@ try:
             pass
         return 0.5
 
+    def _is_headless():
+        """Check if running in headless mode (no windows/UI)."""
+        try:
+            return not bpy.context.window_manager.windows
+        except Exception:
+            return True
+
     def register():
         ping("register_start")
         try:
@@ -247,19 +280,23 @@ try:
                         ping("sidebar_fail", err=str(e)[:200])
                     raise
 
-            # Prepend AI button to VIEW_3D header (left side)
-            bpy.types.VIEW3D_HT_header.prepend(_draw_header_ai_button)
+            # Skip UI modifications in headless mode (e.g., CI tests)
+            if not _is_headless():
+                # Prepend AI button to VIEW_3D header (left side)
+                bpy.types.VIEW3D_HT_header.prepend(_draw_header_ai_button)
 
-            # Register persistent load_post handler
-            bpy.app.handlers.load_post.append(_load_post_handler)
+                # Register persistent load_post handler
+                bpy.app.handlers.load_post.append(_load_post_handler)
 
-            # Also start timer immediately on register
-            global _popup_timer_count
-            _popup_timer_count = 0
-            bpy.app.timers.register(_popup_timer, first_interval=0.5, persistent=True)
+                # Also start timer immediately on register
+                global _popup_timer_count
+                _popup_timer_count = 0
+                bpy.app.timers.register(_popup_timer, first_interval=0.5, persistent=True)
 
-            # Start periodic timer tick for probe
-            bpy.app.timers.register(_timer_tick, first_interval=1.0, persistent=True)
+                # Start periodic timer tick for probe
+                bpy.app.timers.register(_timer_tick, first_interval=1.0, persistent=True)
+            else:
+                ping("register_headless", msg="skipped UI/timers")
 
             _log_error("register: success")
             ping("register_end")
@@ -270,27 +307,29 @@ try:
     def unregister():
         ping("unregister")
         try:
-            # Remove timers
-            try:
-                bpy.app.timers.unregister(_popup_timer)
-            except Exception:
-                pass
-            try:
-                bpy.app.timers.unregister(_timer_tick)
-            except Exception:
-                pass
+            # Skip timer/handler cleanup in headless mode (they were never registered)
+            if not _is_headless():
+                # Remove timers
+                try:
+                    bpy.app.timers.unregister(_popup_timer)
+                except Exception:
+                    pass
+                try:
+                    bpy.app.timers.unregister(_timer_tick)
+                except Exception:
+                    pass
 
-            # Remove load_post handler
-            try:
-                bpy.app.handlers.load_post.remove(_load_post_handler)
-            except Exception:
-                pass
+                # Remove load_post handler
+                try:
+                    bpy.app.handlers.load_post.remove(_load_post_handler)
+                except Exception:
+                    pass
 
-            # Remove header button
-            try:
-                bpy.types.VIEW3D_HT_header.remove(_draw_header_ai_button)
-            except Exception:
-                pass
+                # Remove header button
+                try:
+                    bpy.types.VIEW3D_HT_header.remove(_draw_header_ai_button)
+                except Exception:
+                    pass
 
             for cls in reversed(_CLASSES):
                 try:
