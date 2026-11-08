@@ -62,6 +62,7 @@ try:
             if not bpy.context.window_manager.windows:
                 if _popup_timer_count >= 40:
                     _log_error("_popup_timer: max attempts reached, no windows")
+                    ping("popup_fail", err="no_windows")
                     return None
                 return 0.5
 
@@ -69,12 +70,14 @@ try:
             if window is None or area is None:
                 if _popup_timer_count >= 40:
                     _log_error("_popup_timer: max attempts reached, no VIEW_3D area")
+                    ping("popup_fail", err="no_view3d")
                     return None
                 return 0.5
 
             # Success - window and VIEW_3D area found
             _popup_timer_count = 0
             _log_error("_popup_timer: success - window and VIEW_3D area found")
+            ping("popup_ok", windows=len(bpy.context.window_manager.windows))
             return None
 
         except Exception as e:
@@ -236,8 +239,12 @@ try:
                 try:
                     bpy.utils.register_class(cls)
                     ping(f"{cls.__name__}_register_ok")
+                    if cls.__name__ == "AI_AGENT_PT_panel":
+                        ping("sidebar_ok")
                 except Exception as e:
                     ping(f"{cls.__name__}_register_fail", err=str(e)[:200])
+                    if cls.__name__ == "AI_AGENT_PT_panel":
+                        ping("sidebar_fail", err=str(e)[:200])
                     raise
 
             # Prepend AI button to VIEW_3D header (left side)
