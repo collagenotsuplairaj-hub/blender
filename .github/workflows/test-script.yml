@@ -52,3 +52,34 @@ jobs:
           EOF
 
           "$BLENDER_PATH" -b --python /tmp/test_agent.py
+
+      - name: Test bl_ai_agent.py without header classes (Android robustness)
+        env:
+          BLENDER_PATH: ${{ env.BLENDER_PATH }}
+        run: |
+          set -e
+          cat > /tmp/test_agent_no_headers.py << 'EOF'
+          import sys
+          import traceback
+
+          # Add scripts/startup to path
+          sys.path.insert(0, '${{ github.workspace }}/scripts/startup')
+
+          try:
+              import bpy
+              # Remove header classes that might not exist on Android
+              for name in ["VIEW3D_HT_header", "TOPBAR_HT_upper_bar", "TIME_HT_editor_buttons"]:
+                  if hasattr(bpy.types, name):
+                      delattr(bpy.types, name)
+
+              import bl_ai_agent
+              bl_ai_agent.register()
+              print("REGISTER_OK")
+              bl_ai_agent.unregister()
+              print("UNREGISTER_OK")
+          except Exception as e:
+              traceback.print_exc()
+              sys.exit(1)
+          EOF
+
+          "$BLENDER_PATH" -b --python /tmp/test_agent_no_headers.py
