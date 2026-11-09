@@ -20,18 +20,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Try pip install bpy
-        id: pip_bpy
-        run: |
-          set -e
-          if pip install bpy; then
-            echo "success=true" >> $GITHUB_OUTPUT
-          else
-            echo "success=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Download Blender (fallback)
-        if: steps.pip_bpy.outputs.success == 'false'
+      - name: Download Blender
         run: |
           set -e
           BLENDER_VERSION="4.3.0"
@@ -62,8 +51,4 @@ jobs:
               sys.exit(1)
           EOF
 
-          if [ -n "$BLENDER_PATH" ]; then
-            "$BLENDER_PATH" -b --python /tmp/test_agent.py
-          else
-            python3 /tmp/test_agent.py
-          fi
+          "$BLENDER_PATH" -b --python /tmp/test_agent.py
